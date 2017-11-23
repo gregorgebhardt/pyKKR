@@ -79,5 +79,5 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['numpy', 'scipy', 'pandas', 'cma', 'cluster_work', 'matplotlib', 'matplotlib2tikz'],
+    install_requires=['numpy', 'scipy', 'pandas', 'cma', 'matplotlib', 'matplotlib2tikz'],
 )
