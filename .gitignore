@@ -1,0 +1,11 @@
+experiments/hostfile.*
+experiments/*.err.[0-9]*
+experiments/*.out.[0-9]*
+
+*__pycache__
+.ipynb_checkpoints/
+pyKKR.egg-info
+experiments/data
+.idea
+
+examples/*.dat
