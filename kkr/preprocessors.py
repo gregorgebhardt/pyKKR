@@ -138,6 +138,18 @@ def add_noise(data, column, noise_generator=stats.norm(loc=.0, scale=.1)):
 
 
 def select_reference_set_randomly(data, size, consecutive_sets=1, group_by=None):
+    """selects a random reference set from the given DataFrame. Consecutive sets are computed from the first random
+    reference set, where it is assured that only data points are chosen for the random set that have the required
+    number of successive data points. Using the group_by argument allows to ensure that all consecutive samples are
+    from the same group.
+
+    :param data: a pandas.DataFrame with the samples to choose from
+    :param size: the number of samples in the reference set
+    :param consecutive_sets: the number of consecutive sets returned by this function (default: 1)
+    :param group_by: a group_by argument to ensure that the consecutive samples are from the same group as the first
+    random sample
+    :return: a tuple with the reference sets
+    """
     weights = np.ones(data.shape[0])
 
     if group_by is not None:
@@ -244,6 +256,7 @@ def select_reference_set_by_kernel_activation(data: pd.DataFrame, size: int, ker
         return tuple(reference_set)
     else:
         return reference_set1
+
 
 def cut_at_impact(data: pd.DataFrame):
     df = pd.DataFrame()
