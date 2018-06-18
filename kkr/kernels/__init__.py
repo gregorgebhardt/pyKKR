@@ -17,6 +17,11 @@
 
 import numpy as np
 
+import pyximport
+pyximport.install(setup_args={'include_dirs': np.get_include()})
+
+from ._mahalanobis_distance import MahaDist
+
 
 def linear_kernel(a, b=None):
     if b is None:
@@ -72,7 +77,7 @@ class LinearBandwidthKernel(Kernel):
         return self.get_gram_matrix(a, b)
 
 
-class ExponentialQuadraticKernel(Kernel):
+class OldExponentialQuadraticKernel(Kernel):
     def __init__(self, bandwidth=1., normalized=False, ard=False):
         self.ard = ard
         self.normalized = normalized
@@ -119,3 +124,28 @@ class ExponentialQuadraticKernel(Kernel):
             return diag / np.sqrt(np.prod(self.bandwidth) ** 2 * (2 * np.pi) ** data.shape[1])
         else:
             return diag
+
+
+class ExponentialQuadraticKernel(OldExponentialQuadraticKernel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.maha_dist = MahaDist()
+
+    def get_gram_matrix(self, a: np.ndarray, b: np.ndarray = None):
+        if len(a.shape) == 1:
+            a = a.reshape((1, -1))
+
+        if np.isscalar(self.bandwidth):
+            bandwidth = np.ones(a.shape[1]) * self.bandwidth
+        else:
+            bandwidth = self.bandwidth
+
+        self.maha_dist.set_bandwidth(bandwidth)
+        sqdist = self.maha_dist.get_distance_matrix(a, b)
+
+        K = np.exp(-sqdist)
+
+        if self.normalized:
+            K = K / np.sqrt(np.prod(self.bandwidth) ** 2 * (2 * np.pi) ** a.shape[1])
+
+        return K

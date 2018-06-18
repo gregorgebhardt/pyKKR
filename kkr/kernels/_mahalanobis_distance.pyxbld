@@ -1,0 +1,10 @@
+def make_ext(modname, pyxfilename):
+    from distutils.extension import Extension
+    return Extension(name=modname,
+                     sources=[pyxfilename],
+                     # # arguments for intel
+                     # extra_compile_args=['-xHost', '-O3', '-fopenmp'])
+                     # arguments for gcc
+                     extra_compile_args=['-fopenmp', '-Ofast', '-march=corei7-avx'],
+                     libraries=['gomp']
+                     )
