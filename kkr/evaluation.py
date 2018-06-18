@@ -99,7 +99,7 @@ def bandwidth_factor(**bandwidths):
 
 
 def parameter_arrays(**prefixes):
-    """ Decorates a function with an argument replacement inteded for grouping parameters into lists. The keyword
+    """ Decorates a function with an argument replacement intended for grouping parameters into lists. The keyword
     arguments to the decorator define prefixes for which the incoming arguments are filtered and grouped into a new
     list which is passed to the decorated function under the same keyword.
 

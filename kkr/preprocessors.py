@@ -203,7 +203,7 @@ def select_reference_set_by_kernel_activation(data: pd.DataFrame, size: int, ker
     sets belong to the same group
     :return: a tuple of
     """
-    logical_idx = np.ones(data.shape[0], dtype=bool)
+    logical_idx = pd.Series(np.ones(data.shape[0], dtype=bool), index=data.index)
     if group_by is not None:
         gb = data.groupby(level=group_by)
         last_windows_idx = [gb.indices[e][-i] for e in gb.indices for i in range(1, consecutive_sets+1)]
@@ -213,7 +213,7 @@ def select_reference_set_by_kernel_activation(data: pd.DataFrame, size: int, ker
     logical_idx[last_windows_idx] = False
 
     # get data points that can be used for first data sets
-    reference_data = data.iloc[logical_idx]
+    reference_data = data.iloc[logical_idx.values]
     num_reference_data_points = reference_data.shape[0]
 
     # if we have not enough data to select a reference set, we take all data points
@@ -227,8 +227,8 @@ def select_reference_set_by_kernel_activation(data: pd.DataFrame, size: int, ker
         for i in range(size-1):
             # compute kernel activations for last chosen kernel sample
             kernel_matrix[i, :] = kernel_function(reference_data.loc[reference_set1[-1]].values,
-                                                  reference_data)
-            kernel_matrix[-1, reference_data.index.get_locs(reference_set1[-1])] = 1000
+                                                  reference_data.values)
+            kernel_matrix[-1, reference_data.index.get_loc(reference_set1[-1])] = 1000
 
             max_kernel_activations = kernel_matrix.max(0)
             next_reference_point = np.argmin(max_kernel_activations)
