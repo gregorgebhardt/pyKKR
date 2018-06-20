@@ -27,10 +27,10 @@ def _generate_data_windows_single_series(series: pd.Series or np.ndarray, window
 
     if isinstance(series.index, pd.MultiIndex):
         def get_window_item(s, i):
-            return s.unstack(0).rename_axis(lambda x: x + i).stack().swaplevel().sort_index()
+            return s.unstack(0).rename(lambda x: x + i).stack().swaplevel().sort_index()
     else:
         def get_window_item(s, i):
-            return s.rename_axis(lambda x: x + i)
+            return s.rename(lambda x: x + i)
 
     for i in range(1, window_size):
         # create a copy with renamed axis

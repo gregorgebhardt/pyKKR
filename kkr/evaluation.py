@@ -24,6 +24,8 @@ from .kernels import ExponentialQuadraticKernel
 from .filter import KernelKalmanFilter
 from .smoother import KernelForwardBackwardSmoother
 
+from typing import Dict
+
 
 def parameter_transform(transform):
     """Decorates a function with a transformation of the passed keyword arguments. If a dictionary is passed to the
@@ -96,6 +98,35 @@ def bandwidth_factor(**bandwidths):
         return _bandwidth_factor_func
 
     return _bandwidth_factor
+
+
+def window_bandwidth_factor(**bandwidths: Dict[str, np.ndarray]):
+    """Decorates a function with an argument replacement intended for scaling the bandwidths of the elements of  data
+    windows. The decorator accepts an arbitrary number of keyword arguments, where each kw argument contains the base
+    bandwidths for one bandwidth array that should be created from the decoration. The base bandwidths are expected
+    as a nxm matrix where n is the dimensionality of the data (without windowing) and m is the size of the data
+    windows, i.e., one row for each window and one column for each element in the data windows
+
+    :param bandwidths
+
+    """
+    from itertools import chain
+
+    def _window_bandwidth_factor(func):
+        def _window_bandwidth_factor_func(*args, **kwargs):
+            new_bandwidths = dict()
+            for bw_key, bw_array in bandwidths.items():
+                # get scaling vector from kwargs and broadcast it to the bandwidth array for the keyword
+                scaled_bandwidths = bw_array * kwargs[bw_key]
+                # unfold the scaled bandwidth matrix to a vector and store it in the dict
+                new_bandwidths[bw_key] = scaled_bandwidths.flatten()
+
+            kwargs.update(new_bandwidths)
+            return func(*args, **kwargs)
+
+        return _window_bandwidth_factor_func
+
+    return _window_bandwidth_factor
 
 
 def parameter_arrays(**prefixes):
