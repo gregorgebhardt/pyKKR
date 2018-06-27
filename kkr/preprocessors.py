@@ -21,8 +21,10 @@ import numpy as np
 import scipy.spatial as spatial
 import scipy.stats as stats
 
+from typing import Union
 
-def _generate_data_windows_single_series(series: pd.Series or np.ndarray, window_size):
+
+def _generate_data_windows_single_series(series: Union[pd.Series, np.ndarray], window_size):
     df = pd.DataFrame(series)
 
     if isinstance(series.index, pd.MultiIndex):
@@ -42,7 +44,7 @@ def _generate_data_windows_single_series(series: pd.Series or np.ndarray, window
     return df
 
 
-def generate_data_windows(data: pd.DataFrame or pd.Series, window_size, drop_nan=True):
+def generate_data_windows(data: Union[pd.DataFrame, pd.Series], window_size, drop_nan=True):
     if isinstance(data, pd.Series):
         windows = _generate_data_windows_single_series(data, window_size)
         # create new names with data.name

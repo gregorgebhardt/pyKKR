@@ -244,7 +244,7 @@ class KernelKalmanFilter(object):
             # normalization
             cov = 0.5 * (cov + cov.T)
 
-        m = m / m.sum(axis=0)
+        # m = m / m.sum(axis=0)
 
         return m, cov
 
@@ -383,7 +383,7 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         # update mean and covariance
         n = n + _Q.dot(self._K_1r.T.dot(g_y) - self._KGKO.dot(n))
 
-        # n = n / n.sum(axis=0)
+        n = n / n.sum(axis=0)
 
         if return_Q:
             return n, cov, _Q
