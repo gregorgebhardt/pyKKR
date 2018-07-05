@@ -21,7 +21,8 @@ from .smoother import KernelForwardBackwardSmoother, SubspaceKernelForwardBackwa
 from .environments.Pendulum import Pendulum
 
 from .evaluation import FilterEvaluation, SmootherEvaluation, BayesianUpdateEvaluation, parameter_naming, \
-    parameter_transform, bandwidth_factor, window_bandwidth_factor, parameter_arrays, exception_catcher
+    parameter_transform, bandwidth_factor, window_bandwidth_factor, dimension_bandwidth_factor, parameter_arrays, \
+    exception_catcher
 
 from .kernels import ExponentialQuadraticKernel, LinearBandwidthKernel, linear_kernel
 
@@ -42,6 +43,7 @@ __all__ = ['KernelKalmanFilter',
            'parameter_naming',
            'bandwidth_factor',
            'window_bandwidth_factor',
+           'dimension_bandwidth_factor',
            'parameter_arrays',
            'exception_catcher',
            'ExponentialQuadraticKernel',

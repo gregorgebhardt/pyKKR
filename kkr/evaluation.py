@@ -110,8 +110,6 @@ def window_bandwidth_factor(**bandwidths: Dict[str, np.ndarray]):
     :param bandwidths
 
     """
-    from itertools import chain
-
     def _window_bandwidth_factor(func):
         def _window_bandwidth_factor_func(*args, **kwargs):
             new_bandwidths = dict()
@@ -127,6 +125,35 @@ def window_bandwidth_factor(**bandwidths: Dict[str, np.ndarray]):
         return _window_bandwidth_factor_func
 
     return _window_bandwidth_factor
+
+
+def dimension_bandwidth_factor(**bandwidths: Dict[str, np.ndarray]):
+    """Decorates a function with an argument replacement intended for scaling the bandwidths for each dimension
+    individually when using data windows. I.e., the windows in each dimension get a single bandwidth factor.
+
+    :param bandwidths
+
+    """
+    def _dimension_bandwidth_factor(func):
+        def _dimension_bandwidth_factor_func(*args, **kwargs):
+            new_bandwidths = dict()
+
+            for bw_key, bw_array in bandwidths.items():
+                # get scaling vector from kwargs and broadcast it ot the bandwidth array for the keyword
+                # TODO switch broadcast directions such that each dimension gets a single factor...
+                bw_factor = np.array(kwargs[bw_key])
+                if bw_factor.ndim == 1:
+                    bw_factor = bw_factor.reshape((-1, 1))
+                scaled_bandwidths = bw_array * bw_factor
+                # unfold the scaled bandwidth matrix to a vector and store it in the new_bandwidths dict
+                new_bandwidths[bw_key] = scaled_bandwidths.flatten()
+
+            kwargs.update(new_bandwidths)
+            return func(*args, **kwargs)
+
+        return _dimension_bandwidth_factor_func
+
+    return _dimension_bandwidth_factor
 
 
 def parameter_arrays(**prefixes):
