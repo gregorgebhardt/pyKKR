@@ -320,7 +320,7 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         self._K_1r = self.kernel_k(self.states_1, self.subspace_states)
         _K_2r = self.kernel_k(self.states_2, self.subspace_states)
 
-        _G_22 = self.kernel_g(self.observations)
+        _G = self.kernel_g(self.observations)
 
         # compute model matrices and errors
         # transition model
@@ -333,12 +333,12 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         self._transition_cov = (_v.dot(_v.T)) / self.num_states
 
         # observation model
-        # self._observation_model = np.linalg.solve(_K_1r.T.dot(_K_1r) + self.alpha_o * np.eye(self.subspace_size),
-        #                                           np.eye(self.subspace_size))
+        # self._observation_model = np.linalg.solve(self._K_1r.T.dot(self._K_1r) + self.alpha_o * np.eye(self.num_subspace_states),
+        #                                           np.eye(self.num_subspace_states))
         self._observation_model = np.linalg.inv(
             self._K_1r.T.dot(self._K_1r) + self.alpha_o * np.eye(self.num_subspace_states))
         _KO = self._K_1r.dot(self._observation_model)
-        self._GKO = _G_22.dot(_KO)
+        self._GKO = _G.dot(_KO)
         self._KGKO = self._K_1r.T.dot(self._GKO)
 
         if self.preimage_states is None:
@@ -383,12 +383,24 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         # update mean and covariance
         n = n + _Q.dot(self._K_1r.T.dot(g_y) - self._KGKO.dot(n))
 
-        n = n / n.sum(axis=0)
+        # n = n / n.sum(axis=0)
 
         if return_Q:
             return n, cov, _Q
         else:
             return n, cov
+
+    def transition_update(self, n, cov):
+        n = self._transition_model.dot(n)
+        if cov is not None:
+            cov = self._transition_model.dot(cov).dot(self._transition_model.T) + self._transition_cov
+
+            # normalization
+            cov = 0.5 * (cov + cov.T)
+
+        # n = n / n.sum(axis=0)
+
+        return n, cov
 
     def transform_outputs(self, n, cov):
         mu_x = self._XKO.dot(n)
