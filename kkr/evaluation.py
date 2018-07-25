@@ -24,7 +24,7 @@ from .kernels import ExponentialQuadraticKernel
 from .filter import KernelKalmanFilter
 from .smoother import KernelForwardBackwardSmoother
 
-from typing import Dict
+from typing import Dict, Tuple
 
 
 def parameter_transform(transform):
@@ -154,6 +154,28 @@ def dimension_bandwidth_factor(**bandwidths: Dict[str, np.ndarray]):
         return _dimension_bandwidth_factor_func
 
     return _dimension_bandwidth_factor
+
+
+def tile_bandwidth(**bandwidth_tile_rules: Dict[str, tuple]):
+
+    def _tile_bandwidth(func):
+        def _tile_bandwidth_func(*args, **kwargs):
+            new_bandwidths = dict()
+
+            for bw_key, bw_tile_rule in bandwidth_tile_rules.items():
+                bw_ = kwargs[bw_key]
+                bw_reshape_rule = tuple(1 if t > 1 else -1 for t in bw_tile_rule)
+                bw_ = bw_.reshape(bw_reshape_rule)
+                bw_ = np.tile(bw_, bw_tile_rule)
+                new_bandwidths[bw_key] = bw_.flatten()
+
+            kwargs.update(new_bandwidths)
+            return func(*args, **kwargs)
+
+        return _tile_bandwidth_func
+
+    return _tile_bandwidth
+
 
 
 def parameter_arrays(**prefixes):

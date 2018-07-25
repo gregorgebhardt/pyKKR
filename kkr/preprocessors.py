@@ -24,7 +24,7 @@ import scipy.stats as stats
 from typing import Union
 
 
-def _generate_data_windows_single_series(series: Union[pd.Series, np.ndarray], window_size):
+def _generate_data_windows_single_series(series: Union[pd.Series, np.ndarray], window_size, step_size=1):
     df = pd.DataFrame(series)
 
     if isinstance(series.index, pd.MultiIndex):
@@ -36,7 +36,7 @@ def _generate_data_windows_single_series(series: Union[pd.Series, np.ndarray], w
 
     for i in range(1, window_size):
         # create a copy with renamed axis
-        df_i = get_window_item(series, i)
+        df_i = get_window_item(series, i*step_size)
 
         # concat copy to df
         df = pd.concat([df, df_i], axis=1, ignore_index=True)
@@ -44,9 +44,9 @@ def _generate_data_windows_single_series(series: Union[pd.Series, np.ndarray], w
     return df
 
 
-def generate_data_windows(data: Union[pd.DataFrame, pd.Series], window_size, drop_nan=True):
+def generate_data_windows(data: Union[pd.DataFrame, pd.Series], window_size, step_size=1, drop_nan=True):
     if isinstance(data, pd.Series):
-        windows = _generate_data_windows_single_series(data, window_size)
+        windows = _generate_data_windows_single_series(data, window_size, step_size)
         # create new names with data.name
         if isinstance(data.name, str):
             # if the series has a name, we create a MultiIndex with the name on the upper layer and the index on the
@@ -62,7 +62,7 @@ def generate_data_windows(data: Union[pd.DataFrame, pd.Series], window_size, dro
 
         # handle each column individually
         for column in data.columns:
-            windows_col = _generate_data_windows_single_series(data[column], window_size)
+            windows_col = _generate_data_windows_single_series(data[column], window_size, step_size)
             # create new column names
             if isinstance(column, tuple):
                 # if the columns come from a MultiIndex, we get tuples and extend them by the index

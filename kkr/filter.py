@@ -359,7 +359,7 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         # eig_v[eig_v < 1e-16 * eig_v.max()] = 1e-16 * eig_v.max()
         # self._cov_0 = eig_r.dot(np.diag(eig_v)).dot(eig_r.T)
         #
-        # self._m_0 = self._m_0 / self.n_0.sum(axis=0)
+        # self._m_0 = self._m_0 / self._m_0.sum(axis=0)
 
         self._precomputed = False
         self._model_learned = True
@@ -379,10 +379,14 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
 
             # normalization
             cov = 0.5 * (cov + cov.T)
+            # [eig_v, eig_r] = np.linalg.eigh(cov)
+            # eig_v[eig_v < 1e-16 * eig_v.max()] = 1e-16 * eig_v.max()
+            # cov = eig_r.dot(np.diag(eig_v)).dot(eig_r.T)
 
         # update mean and covariance
         n = n + _Q.dot(self._K_1r.T.dot(g_y) - self._KGKO.dot(n))
 
+        # n[n < .0] = 1e-8
         # n = n / n.sum(axis=0)
 
         if return_Q:
@@ -397,7 +401,11 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
 
             # normalization
             cov = 0.5 * (cov + cov.T)
+            # [eig_v, eig_r] = np.linalg.eigh(cov)
+            # eig_v[eig_v < 1e-16 * eig_v.max()] = 1e-16 * eig_v.max()
+            # cov = eig_r.dot(np.diag(eig_v)).dot(eig_r.T)
 
+        # n[n < .0] = 1e-8
         # n = n / n.sum(axis=0)
 
         return n, cov

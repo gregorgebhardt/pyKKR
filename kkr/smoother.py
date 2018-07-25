@@ -171,10 +171,10 @@ class SubspaceKernelForwardBackwardSmoother(KernelForwardBackwardSmoother):
 
         self.subspace_states = subspace_states
 
-        self.fw_filter = SubspaceKernelKalmanFilter(self.states_1, self.states_2, self.observations_2,
+        self._fw_filter = SubspaceKernelKalmanFilter(self.states_1, self.states_2, self.observations_2,
                                                     self.init_fw_states, self.preimage_states, self.subspace_states)
-        self.bw_filter = SubspaceKernelKalmanFilter(self.states_3, self.states_2, self.observations_2,
-                                                    self.init_fw_states, self.preimage_states, self.subspace_states)
+        self._bw_filter = SubspaceKernelKalmanFilter(self.states_3, self.states_2, self.observations_2,
+                                                    self.init_bw_states, self.preimage_states, self.subspace_states)
 
     def smoothing_update(self, m_fw, m_bw, cov_fw, cov_bw):
         _Z = np.linalg.solve((cov_fw + cov_bw), cov_bw).T
