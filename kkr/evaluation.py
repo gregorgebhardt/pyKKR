@@ -266,6 +266,10 @@ class FilterEvaluation(object):
 
         self._is_setup = True
 
+    def set_evaluation_data(self, test_observations, test_groundtruth):
+        self.__test_observations = test_observations
+        self.__test_groundtruth = test_groundtruth
+
     def evaluate(self, eval_function=mean_squared_error, **kw_args) -> float:
         assert self._is_setup
 
