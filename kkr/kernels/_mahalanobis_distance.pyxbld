@@ -3,7 +3,8 @@ def make_ext(modname, pyxfilename):
     return Extension(name=modname,
                      sources=[pyxfilename],
                      # # arguments for intel
-                     # extra_compile_args=['-xHost', '-O3', '-fopenmp'])
+                     # extra_compile_args=['-O3' 'xHost', '-fopenmp'])
                      # arguments for gcc
-                     extra_compile_args=['-O3']
+                     extra_compile_args=['-Ofast', '-march=corei7-avx', '-fopenmp'],
+                     libraries=['gomp']
                      )
