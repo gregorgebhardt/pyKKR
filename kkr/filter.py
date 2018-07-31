@@ -56,6 +56,10 @@ class KernelKalmanFilter(object):
         self._RG = None
         self._XO = None
 
+        self.use_posterior_decoding = False
+        self._K = None
+        self._diagK = None
+
         self.use_observation_cov = False
         self.interpret_bandwidth_as_factor = True
 
@@ -121,6 +125,10 @@ class KernelKalmanFilter(object):
         #
         # self.m_0 = self.m_0 / self.m_0.sum(axis=0)
 
+        if self.use_posterior_decoding:
+            self._K = _K_11
+            self._diagK = self.kernel_k.get_gram_diag(self.states_1)
+
         self._precomputed = False
         self._model_learned = True
 
@@ -174,7 +182,10 @@ class KernelKalmanFilter(object):
                     m, _ = self.observation_update(m, cov, observations[i, ...].T, _Q)
 
             # output transform
-            mu_x[i, :, :], sigma_x[i, :, :] = self.transform_outputs(m, cov)
+            if self.use_posterior_decoding:
+                mu_x[i, :, :], sigma_x[i, :, :] = self.max_aposteriori_output(m, cov)
+            else:
+                mu_x[i, :, :], sigma_x[i, :, :] = self.transform_outputs(m, cov)
 
             # store embeddings
             if return_m in ['post', 'posterior', 'both']:
@@ -253,6 +264,14 @@ class KernelKalmanFilter(object):
         sigma_x = self._XO.dot(cov).dot(self._XO.T)
 
         return mu_x, sigma_x
+
+    def max_aposteriori_output(self, m, cov):
+        w = -2 * m.T.dot(self._K) + self._diagK
+        max_w = np.argmax(w, axis=1)
+        max_x = self.preimage_states[max_w, :].T
+        sigma_x = self._XO.dot(cov).dot(self._XO.T)
+
+        return max_x, sigma_x
 
     def precompute_Q_and_S(self, observations):
         self._precomputed_observations = observations.copy()
@@ -361,6 +380,9 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         #
         # self._m_0 = self._m_0 / self._m_0.sum(axis=0)
 
+        if self.use_posterior_decoding:
+            self._diagK = self.kernel_k.get_gram_diag(self.states_1)
+
         self._precomputed = False
         self._model_learned = True
 
@@ -415,3 +437,11 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         sigma_x = self._XKO.dot(cov).dot(self._XKO.T)
 
         return mu_x, sigma_x
+
+    def max_aposteriori_output(self, m, cov):
+        w = -2 * m.T.dot(self._K_1r.T) + self._diagK
+        max_w = np.argmax(w, axis=1)
+        max_x = self.preimage_states[max_w, :].T
+        sigma_x = self._XKO.dot(cov).dot(self._XKO.T)
+
+        return max_x, sigma_x
