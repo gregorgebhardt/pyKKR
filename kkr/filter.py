@@ -318,6 +318,7 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
 
         self._GKO = None
         self._KGKO = None
+        self._KO = None
         self._XKO = None
         self._K_1r = None
 
@@ -352,19 +353,20 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         self._transition_cov = (_v.dot(_v.T)) / self.num_states
 
         # observation model
-        # self._observation_model = np.linalg.solve(self._K_1r.T.dot(self._K_1r) + self.alpha_o * np.eye(self.num_subspace_states),
+        # self._observation_model = np.linalg.solve(self._K_1r.T.dot(self._K_1r) +
+        #                                           self.alpha_o * np.eye(self.num_subspace_states),
         #                                           np.eye(self.num_subspace_states))
         self._observation_model = np.linalg.inv(
             self._K_1r.T.dot(self._K_1r) + self.alpha_o * np.eye(self.num_subspace_states))
-        _KO = self._K_1r.dot(self._observation_model)
-        self._GKO = _G.dot(_KO)
+        self._KO = self._K_1r.dot(self._observation_model)
+        self._GKO = _G.dot(self._KO)
         self._KGKO = self._K_1r.T.dot(self._GKO)
 
         if self.preimage_states is None:
             self.preimage_states = self.observations
 
         # projection into state space
-        self._XKO = self.preimage_states.T.dot(_KO)
+        self._XKO = self.preimage_states.T.dot(self._KO)
         self.output_dimension = self.preimage_states.shape[1]
 
         # initial embedding
@@ -433,7 +435,14 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         return n, cov
 
     def transform_outputs(self, n, cov):
-        mu_x = self._XKO.dot(n)
+        # mu_x = self._XKO.dot(n)
+        # sigma_x = self._XKO.dot(cov).dot(self._XKO.T)
+
+        # normalize the weights in the RKHS of the full data set.
+        m = self._KO.dot(n)
+        m /= m.sum(axis=0)
+        mu_x = self.preimage_states.T.dot(m)
+
         sigma_x = self._XKO.dot(cov).dot(self._XKO.T)
 
         return mu_x, sigma_x
@@ -445,3 +454,235 @@ class SubspaceKernelKalmanFilter(KernelKalmanFilter):
         sigma_x = self._XKO.dot(cov).dot(self._XKO.T)
 
         return max_x, sigma_x
+
+
+class KernelBayesFilter:
+    def __init__(self,
+                 states_1: np.ndarray,
+                 states_2: np.ndarray,
+                 observations: np.ndarray,
+                 init_states: np.ndarray,
+                 preimage_states: np.ndarray = None):
+
+        self.states_1 = states_1
+        self.states_2 = states_2
+        self.observations = observations
+        self.init_states = init_states
+        self.preimage_states = preimage_states
+        if self.preimage_states is None:
+            self.preimage_states = observations
+
+        self.kernel_k = ExponentialQuadraticKernel()
+        self.kernel_g = ExponentialQuadraticKernel()
+        self._k_g = lambda y: self.kernel_g(self.observations, y)
+
+        self.num_states = states_1.shape[0]
+        self.output_dimension = self.preimage_states.shape[1]
+
+        self.alpha_t = np.exp(-10)
+        self.alpha_o1 = np.exp(-10)
+        self.alpha_o2 = np.exp(-10)
+
+        self._transition_model = None
+
+        self._G = None
+        self._C = None
+        self._XO = None
+        self._cov_0 = None
+        self._m_0 = None
+
+        self._model_learned = False
+
+    def learn_model(self, bandwidth_k=None, bandwidth_g=None, alpha_t=None, alpha_o1=None, alpha_o2=None):
+        # update model parameters
+        if bandwidth_k is not None:
+            self.kernel_k.bandwidth = bandwidth_k
+        if bandwidth_g is not None:
+            self.kernel_g.bandwidth = bandwidth_g
+        if alpha_t is not None:
+            self.alpha_t = alpha_t
+        if alpha_o1 is not None:
+            self.alpha_o1 = alpha_o1
+        if alpha_o2 is not None:
+            self.alpha_o2 = alpha_o2
+
+        # compute kernel matrices
+        _K_11 = self.kernel_k(self.states_1)
+        _K_12 = self.kernel_k(self.states_1, self.states_2)
+        _K_22 = self.kernel_k(self.states_2, self.states_2)
+        _K_20 = self.kernel_k(self.states_2, self.init_states)
+        self._G = self.kernel_g(self.observations)
+
+        # transition model
+        self._transition_model = np.linalg.solve(_K_11 + self.alpha_t * np.eye(self.num_states), _K_12)
+
+        # initialize embedding
+        self._C = np.linalg.solve(_K_22 + self.alpha_o1 * np.eye(self.num_states), _K_22)
+
+        self._cov_0 = np.linalg.solve(_K_22 + self.alpha_o1 * np.eye(self.num_states), _K_20)
+        self._m_0 = np.mean(self._cov_0, axis=1, keepdims=True)
+
+        # observation model
+        _O = np.linalg.solve(_K_22 + self.alpha_t * np.eye(self.num_states), _K_22)
+
+        # projection into state space
+        self._XO = self.preimage_states.T.dot(_O)
+
+        self._model_learned = True
+
+    def filter(self, observations, return_m=False):
+        assert self._model_learned
+        assert (len(observations.shape) <= 3)
+
+        if len(observations.shape) == 1:
+            observations = observations.reshape(-1, 1, 1)
+        elif len(observations.shape) == 2:
+            observations = observations.reshape(observations.shape + (1,))
+
+        num_observations, data_dimension, num_parallel_evaluations = observations.shape
+
+        mu_x = np.zeros((observations.shape[0], self.output_dimension, num_parallel_evaluations))
+
+        m = self.initial_embeddings(num_parallel_evaluations)
+
+        m_storage_prior = np.zeros((num_observations, *m.shape)) if return_m in ['prior', 'both'] else None
+        m_storage_post = np.zeros((num_observations, *m.shape)) if return_m in ['post', 'posterior', 'both'] else None
+
+        for i in range(num_observations):
+            # store embeddings
+            if return_m in ['prior', 'both']:
+                m_storage_prior[i, :] = m
+
+            # observation update
+            if not np.isnan(observations[i, :]).any():
+                for j in range(num_parallel_evaluations):
+                    m[:, [j]] = self.observation_update(m[:, [j]], observations[i, :, [j]])
+
+            # output transform
+            mu_x[i, :, :] = self.transform_outputs(m)
+
+            # store embeddings
+            if return_m in ['post', 'posterior', 'both']:
+                m_storage_post[i, :] = m
+
+            # transition update
+            m = self.transition_update(m)
+
+        if num_parallel_evaluations == 1:
+            mu_x = mu_x.squeeze(axis=2)
+
+        return_values = (mu_x, None)
+
+        if return_m in ['prior', 'both']:
+            return_values += (m_storage_prior,)
+        if return_m in ['post', 'posterior', 'both']:
+            return_values += (m_storage_post,)
+
+        return return_values
+
+    def initial_embeddings(self, num_parallel_evaluations: int = 1):
+        m = np.tile(self._m_0, [num_parallel_evaluations])
+
+        return m
+
+    def observation_update(self, m, y):
+        # embed observation
+        g_y = self._k_g(y)
+
+        _D = np.diag(self._C.dot(m).flat)
+        _DG = _D.dot(self._G)
+        m = np.linalg.solve(_DG + self.alpha_o2 * np.eye(self.num_states), _D).dot(g_y)
+
+        # m = m / m.sum(axis=0)
+
+        return m
+
+    def transition_update(self, m):
+        m = self._transition_model.dot(m)
+        # m = m / m.sum(axis=0)
+
+        return m
+
+    def transform_outputs(self, m):
+        mu_x = self._XO.dot(m)
+
+        return mu_x
+
+
+class SubspaceKernelBayesFilter(KernelBayesFilter):
+    def __init__(self,
+                 states_1: np.ndarray,
+                 states_2: np.ndarray,
+                 observations: np.ndarray,
+                 init_states: np.ndarray = None,
+                 preimage_states: np.ndarray = None,
+                 subspace_states: np.ndarray = None):
+
+        super().__init__(states_1, states_2, observations, init_states, preimage_states)
+
+        if subspace_states is None:
+            subspace_states = states_1
+            Warning("No subspace data set was given. Taking states_1 as subspace data.")
+
+        assert (subspace_states.shape <= self.states_1.shape)
+
+        self._K_r = None
+        self._E = None
+
+        self.subspace_states = subspace_states
+        self.num_subspace_states = self.subspace_states.shape[0]
+
+    def learn_model(self, bandwidth_k=None, bandwidth_g=None, alpha_t=None, alpha_o1=None, alpha_o2=None):
+        # update model parameters
+        if bandwidth_k is not None:
+            self.kernel_k.bandwidth = bandwidth_k
+        if bandwidth_g is not None:
+            self.kernel_g.bandwidth = bandwidth_g
+        if alpha_t is not None:
+            self.alpha_t = alpha_t
+        if alpha_o1 is not None:
+            self.alpha_o1 = alpha_o1
+        if alpha_o2 is not None:
+            self.alpha_o2 = alpha_o2
+
+        # compute kernel matrices
+        _K_11 = self.kernel_k(self.states_1)
+        _K_12 = self.kernel_k(self.states_1, self.states_2)
+        _K_22 = self.kernel_k(self.states_2, self.states_2)
+        _K_20 = self.kernel_k(self.states_2, self.init_states)
+        self._G = self.kernel_g(self.observations)
+        self._K_r = self.kernel_k(self.states_2, self.subspace_states)
+
+        # transition model
+        self._transition_model = np.linalg.solve(_K_11 + self.alpha_t * np.eye(self.num_states), _K_12)
+
+        # initialize embedding
+        self._m_0 = np.ones((self.num_states, 1)) / self.num_states
+
+        # observation model
+        _O = np.linalg.solve(_K_22 + self.alpha_t * np.eye(self.num_states), _K_22)
+
+        # projection into state space
+        self._XO = self.preimage_states.T.dot(_O)
+
+        self._C = np.linalg.solve(self._K_r.T.dot(self._K_r) + self.alpha_o1 * np.eye(self.num_subspace_states),
+                                  self._K_r.T)
+        self._E = self._K_r.T.dot(self._G).dot(self._K_r)
+
+        self._model_learned = True
+
+    def observation_update(self, n, y):
+        # embed observation
+        g_y = self._k_g(y)
+
+        _L = n * self._C.T
+        # _L = np.diag(n.flat).dot(self._C.T)
+        _D = self._C.dot(_L)
+        _DE = _D.dot(self._E)
+        _DKg = _D.dot(self._K_r.T.dot(g_y))
+
+        n = _L.dot(self._E).dot(np.linalg.solve(_DE.dot(_DE) + self.alpha_o2 * np.eye(self.num_subspace_states), _DKg))
+
+        n = n / n.sum(axis=0)
+
+        return n

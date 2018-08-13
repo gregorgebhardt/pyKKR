@@ -15,7 +15,7 @@
 #     You should have received a copy of the GNU General Public License
 #     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .filter import KernelKalmanFilter, SubspaceKernelKalmanFilter
+from .filter import KernelKalmanFilter, SubspaceKernelKalmanFilter, KernelBayesFilter, SubspaceKernelBayesFilter
 from .smoother import KernelForwardBackwardSmoother, SubspaceKernelForwardBackwardSmoother
 
 from .environments.Pendulum import Pendulum
@@ -35,6 +35,8 @@ __all__ = ['KernelKalmanFilter',
            'SubspaceKernelKalmanFilter',
            'KernelForwardBackwardSmoother',
            'SubspaceKernelForwardBackwardSmoother',
+           'KernelBayesFilter',
+           'SubspaceKernelBayesFilter',
            'Pendulum',
            'FilterEvaluation',
            'SmootherEvaluation',
