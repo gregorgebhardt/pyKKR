@@ -361,12 +361,11 @@ class BayesianUpdateEvaluation(object):
         # save model data
         self._model = model
 
-    def evaluate(self, bandwidth_k, bandwidth_g, alpha_1, alpha_2, with_time=False):
+    def _create_model(self, bandwidth_k, bandwidth_g, alpha_1, alpha_2):
         self.kernel_k.bandwidth = bandwidth_k
         self.kernel_g.bandwidth = bandwidth_g
 
         if self._model.startswith('kbr'):
-
             class _Model:
                 def __init__(s):
                     # model matrices
@@ -393,6 +392,10 @@ class BayesianUpdateEvaluation(object):
                 def transform(s, _m):
                     return s._X.T.dot(s._C.dot(_m))
 
+                def transform_cov(s, _cov):
+                    XC = s._X.T.dot(s._C)
+                    return XC.dot(_cov).dot(XC.T)
+
             if self._model == 'kbr_a':
                 class Model(_Model):
                     def update(s, _m, _, _g_y):
@@ -412,7 +415,8 @@ class BayesianUpdateEvaluation(object):
                     def update(s, _m, _, _g_y):
                         s._D = np.diag(s._C.dot(_m).flat)
                         s._DG = s._D.dot(s._G)
-                        _m = s._DG.dot(np.linalg.solve(s._DG.dot(s._DG) + alpha_2 * np.eye(self._kernel_size), s._D)).dot(_g_y)
+                        _m = s._DG.dot(
+                            np.linalg.solve(s._DG.dot(s._DG) + alpha_2 * np.eye(self._kernel_size), s._D)).dot(_g_y)
 
                         _m = _m / _m.sum(axis=0)
 
@@ -457,9 +461,10 @@ class BayesianUpdateEvaluation(object):
                     # s._L2 = np.diag(s._K_r.dot(s._C).dot(_m))
                     s._D = s._C.dot(s._L)
                     s._DE = s._D.dot(s._E)
-                    s._DKg = s._D.dot(s._K_r.T.dot(g_y))
+                    s._DKg = s._D.dot(s._K_r.T.dot(_g_y))
 
-                    _m = s._L.dot(s._E).dot(np.linalg.solve(s._DE.dot(s._DE) + alpha_2 * np.eye(self._kernel_size), s._DKg))
+                    _m = s._L.dot(s._E).dot(
+                        np.linalg.solve(s._DE.dot(s._DE) + alpha_2 * np.eye(self._kernel_size), s._DKg))
                     # _m = s._L2.T.dot(s._E2).dot(np.linalg.solve(s._DE.dot(s._DE) + alpha_2 * np.eye(self.__kernel_size), s._DKg))
 
                     _m = _m / _m.sum(axis=0)
@@ -468,6 +473,10 @@ class BayesianUpdateEvaluation(object):
 
                 def transform(s, _m):
                     return s._X.T.dot(s._K_r).dot(s._C.dot(_m))
+
+                def transform_cov(s, _cov):
+                    XKrC = s._X.T.dot(s._K_r).dot(s._C)
+                    return XKrC.dot(_cov).dot(XKrC.T)
 
         if self._model == 'kkr':
             class Model:
@@ -524,6 +533,9 @@ class BayesianUpdateEvaluation(object):
                 def transform(s, _m):
                     return s._XO.dot(_m)
 
+                def transform_cov(s, _cov):
+                    return s._XO.dot(_cov).dot(s._XO.T)
+
         if self._model == 'sub_kkr':
             class Model:
                 def __init__(s):
@@ -572,7 +584,13 @@ class BayesianUpdateEvaluation(object):
                 def transform(s, _m):
                     return s._XKO.dot(_m)
 
-        model = Model()
+                def transform_cov(s, _cov):
+                    return s._XKO.dot(_cov).dot(s._XKO.T)
+
+        return Model()
+
+    def evaluate(self, bandwidth_k, bandwidth_g, alpha_1, alpha_2, with_time=False, with_cov=False):
+        model = self._create_model(bandwidth_k, bandwidth_g, alpha_1, alpha_2)
         t_diff = 0
 
         # perform Bayesian updates
@@ -590,13 +608,16 @@ class BayesianUpdateEvaluation(object):
                 t_diff += time.clock() - t0
 
                 self._test_data.loc[(slice(None), i), 'mu'] = model.transform(m).T
+
+                if with_cov:
+                    self._test_data.loc[(slice(None), i), 'c'] = np.tile(model.transform_cov(cov), (num_trials, 1))
         else:
             for i, df_trial in self._test_data[['context', 'samples']].groupby(level=0):
                 m = model.m_0.copy()
                 cov = None
 
                 for (t_i, s_i), context, sample in df_trial.itertuples():
-                    g_y = model.k_g(sample)
+                    g_y = model.k_g(np.array([[sample]]))
 
                     t0 = time.clock()
                     m, cov = model.update(m, cov, g_y)
@@ -606,11 +627,23 @@ class BayesianUpdateEvaluation(object):
                     # m = m / m.sum(axis=0)
 
                     # project into state space
-                    self._test_data.loc[(t_i, s_i), 'mu'] = model.transform(m)
+                    self._test_data.loc[(t_i, s_i), 'mu'] = model.transform(m)[0]
+
+        return_vals = self._test_data.mu,
+
+        if with_cov:
+            return_vals = *return_vals, self._test_data.c
+        if with_time:
+            return_vals = *return_vals, t_diff
+
+        return return_vals
+
+    def evaluate_mse(self, bandwidth_k, bandwidth_g, alpha_1, alpha_2, with_time=False):
+        rets = self.evaluate(bandwidth_k, bandwidth_g, alpha_1, alpha_2, with_time=False)
 
         score = ((self._test_data['context'] - self._test_data['mu']) ** 2).groupby(level=1).mean().sum()
 
         if with_time:
-            return score, t_diff
+            return score, rets[-1]
         else:
             return score
